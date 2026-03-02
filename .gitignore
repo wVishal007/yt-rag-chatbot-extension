@@ -1,0 +1,93 @@
+# ===============================
+# Python & Project Ignored Files
+# ===============================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+env/
+venv/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VSCode / IDEs
+.vscode/
+.idea/
+
+# Local environment variables
+.env
+.env.* 
+
+# Logs
+*.log
+
+# FastAPI / Uvicorn
+*.db
+*.sqlite3
+
+# Generated merged/output files
+combined_code.py
+
+# Vector database
+vector_db/
+
+# Temporary files
+tempCodeRunnerFile.py
+*.tmp
+*.swp
+*.swo
+*.bak
+*.orig
+*.rej
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
