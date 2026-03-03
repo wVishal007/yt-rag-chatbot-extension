@@ -4,6 +4,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from backend.services.rag_service import RAGService
 import logging
+from fastapi.middleware.cors import CORSMiddleware
+origins = [
+    "http://localhost:3000",
+]
+
 
 # -----------------------------
 # Configure Logging
@@ -18,6 +23,13 @@ logging.basicConfig(
 # -----------------------------
 app = FastAPI(title="RAG Video Assistant")
 rag_service = RAGService()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,        # <-- important
+    allow_credentials=True,
+    allow_methods=["*"],          # allow POST, GET, OPTIONS, etc.
+    allow_headers=["*"],          # allow Content-Type, Authorization, etc.
+)
 
 # -----------------------------
 # Request Models
