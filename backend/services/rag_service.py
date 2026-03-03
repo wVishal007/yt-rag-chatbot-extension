@@ -86,7 +86,8 @@ class RAGService:
 
             self.vector_manager.create_vector_store(new_chunks)
 
-            logging.info(f"Ingested {len(new_chunks)} chunks for video {video_id}")
+            # logging.info(f"Ingested {len(new_chunks)} chunks for video {video_id}")
+            logging.info(f"video {video_id} ingested successfully now you can chat")
 
             return {
                 "status": "indexed",
