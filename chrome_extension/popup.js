@@ -1,127 +1,120 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const ingestBtn = document.getElementById('ingestBtn');
-  const askBtn = document.getElementById('askBtn');
-  const questionInput = document.getElementById('questionInput');
-  const chatHistory = document.getElementById('chatHistory');
-  const toastContainer = document.getElementById('toastContainer');
-  
-  let sessionId = `s_${Date.now()}`, ingested = false;
-  const API = 'http://localhost:3001';
+document.addEventListener('DOMContentLoaded', async () => {
+    const ingestBtn = document.getElementById('ingestBtn');
+    const askBtn = document.getElementById('askBtn');
+    const videoIdInput = document.getElementById('videoIdInput');
+    const questionInput = document.getElementById('questionInput');
+    const chatHistory = document.getElementById('chatHistory');
+    const toastContainer = document.getElementById('toastContainer');
+    const connectionStatus = document.getElementById('connectionStatus');
+    
+    let sessionId = `s_${Date.now()}`;
+    const API = 'http://localhost:3001';
 
-  // 🎀 Utilities
-  const toast = (msg, type='info') => {
-    const t = document.createElement('div');
-    t.className = `toast ${type}`;
-    t.innerHTML = `<span>${msg}</span>`;
-    toastContainer.appendChild(t);
-    setTimeout(() => t.remove(), 3000);
-  };
+    const parseYouTubeId = (text) => {
+        const match = text.match(/(?:v=|\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
+        return match ? match[1] : (text.length === 11 ? text : null);
+    };
 
-  const addMsg = (text, user=false, sources=[]) => {
+ const addMsg = (text, user=false) => {
+    // Remove welcome message
     chatHistory.querySelector('.welcome-message')?.remove();
+
     const div = document.createElement('div');
-    div.className = `message ${user?'user':'ai'}`;
+    div.className = `message ${user ? 'user' : 'ai'}`;
+
+    let content;
+    if (user) {
+        content = text; // User text stays plain
+    } else {
+        // Parse Markdown for AI messages
+        if (typeof marked !== 'undefined') {
+            content = marked.parse(text);
+        } else {
+            content = text;
+        }
+    }
+
     div.innerHTML = `
-      <div class="message-avatar">${user?'🧑':'🤖'}</div>
-      <div class="message-content">${text}
-        ${!user && sources.length ? `<div class="message-sources">${sources.slice(0,2).map((s,i)=>`<a href="#">[${i+1}]</a>`).join(' ')}</div>`:''}
-        ${!user ? '<button class="copy-btn">📋</button>' : ''}
-      </div>`;
+        <div class="message-avatar">${user ? '🧑' : '🤖'}</div>
+        <div class="message-content ${!user ? 'markdown-content' : ''}">${content}</div>
+    `;
+
     chatHistory.appendChild(div);
     chatHistory.scrollTop = chatHistory.scrollHeight;
-    div.querySelector('.copy-btn')?.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(text);
-      toast('Copied!', 'success');
-    });
-  };
+};
 
-  const showTyping = () => {
-    const el = document.createElement('div');
-    el.id = 'typing';
-    el.className = 'message ai';
-    el.innerHTML = `<div class="message-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>`;
-    chatHistory.appendChild(el);
-    return el;
-  };
+    const toast = (msg, type='info') => {
+        const t = document.createElement('div');
+        t.className = `toast ${type}`;
+        t.innerHTML = `<span>${msg}</span>`;
+        toastContainer.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+    };
 
-  // 🎬 Auto-extract video ID from current tab
-  const getVideoId = async () => {
-    try {
-      const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-      const url = tab.url || '';
-      const match = url.match(/(?:v=|\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
-      return match ? match[1] : null;
-    } catch { return null; }
-  };
+    const ingestVideo = async (videoId) => {
+        ingestBtn.classList.add('loading');
+        try {
+            const res = await fetch(`${API}/ingest`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ video_id: videoId })
+            });
+            if (!res.ok) throw new Error('Ingest failed');
+            toast('Video indexed!', 'success');
+            addMsg("✅ Video ingested! Ask me anything.", false);
+        } catch(e) { 
+            toast(e.message, 'error'); 
+        } finally { 
+            ingestBtn.classList.remove('loading'); 
+        }
+    };
 
-  // 📥 Ingest
-  const ingest = async () => {
-    const videoId = await getVideoId();
-    if (!videoId) return toast('Open a YouTube video first', 'warning');
-    
-    ingestBtn.classList.add('loading'); ingestBtn.disabled = true;
-    try {
-      const res = await fetch(`${API}/ingest`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({video_id: videoId})
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed');
-      
-      ingested = true;
-      questionInput.disabled = false; askBtn.disabled = false;
-      toast(`✓ ${data.chunks} chunks indexed`, 'success');
-      addMsg(`_Ready!_ Asked about **${data.chunks}** segments. 🎬`, false);
-    } catch(e) {
-      toast(e.message, 'error');
-    } finally {
-      ingestBtn.classList.remove('loading'); ingestBtn.disabled = false;
+    // ==== Auto-inject video ID from YouTube tab ====
+    if (chrome?.tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const url = tabs[0].url;
+            const videoId = parseYouTubeId(url);
+            if (videoId) {
+                videoIdInput.value = videoId;
+                ingestVideo(videoId);
+            }
+        });
     }
-  };
 
-  // 💬 Ask
-  const ask = async () => {
-    const q = questionInput.value.trim();
-    if (!q || !ingested) return;
-    
-    addMsg(q, true);
-    questionInput.value = '';
-    const typing = showTyping();
-    askBtn.disabled = true; questionInput.disabled = true;
+    const ask = async () => {
+        const q = questionInput.value.trim();
+        if (!q) return;
+        addMsg(q, true);
+        questionInput.value = '';
+        
+        const typing = document.createElement('div');
+        typing.className = 'message ai';
+        typing.innerHTML = `<div class="message-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>`;
+        chatHistory.appendChild(typing);
 
-    try {
-      const res = await fetch(`${API}/chat`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({session_id: sessionId, question: q})
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error');
-      
-      typing.remove();
-      addMsg(data.answer, false, data.sources || []);
-    } catch(e) {
-      typing.remove();
-      addMsg(`Error: ${e.message} 😅`, false);
-      toast('Request failed', 'error');
-    } finally {
-      askBtn.disabled = false; questionInput.disabled = false; questionInput.focus();
-    }
-  };
+        try {
+            const res = await fetch(`${API}/chat`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ session_id: sessionId, question: q })
+            });
+            const data = await res.json();
+            typing.remove();
+            if (res.ok) addMsg(data.answer, false);
+            else addMsg("I need data! Please ingest a video first.", false);
+        } catch(e) {
+            typing.remove();
+            addMsg("Error connecting to server.", false);
+        }
+    };
 
-  // 🎀 Events
-  ingestBtn.onclick = ingest;
-  askBtn.onclick = ask;
-  questionInput.onkeypress = (e) => e.key === 'Enter' && ask();
-  
-  // Init
-  (async () => {
-    try {
-      await fetch(`${API}/health`);
-      document.getElementById('connectionStatus').innerHTML = '<span class="status-dot"></span><span>Connected</span>';
-    } catch {
-      toast('Backend offline', 'warning');
-    }
-  })();
+    askBtn.onclick = ask;
+    questionInput.onkeypress = (e) => { if(e.key === 'Enter') ask(); };
+
+    // Connection Check
+    fetch(`${API}/health`).then(() => {
+        connectionStatus.innerHTML = '<span class="status-dot" style="background:var(--success)"></span><span>Online</span>';
+        questionInput.disabled = false;
+        askBtn.disabled = false;
+    }).catch(() => {});
 });

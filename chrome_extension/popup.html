@@ -5,95 +5,56 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>YouTube RAG Assistant</title>
   <link rel="stylesheet" href="popup.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div class="app-container">
-    
-    <!-- 🎀 Header -->
     <header class="header">
       <div class="logo">
         <span class="logo-icon">🎬</span>
         <h1>YouTube RAG Assistant</h1>
       </div>
       <div class="status-badge" id="connectionStatus">
-        <span class="status-dot"></span>
-        <span>Ready</span>
+        <span class="status-dot" style="background:var(--error)"></span>
+        <span>Offline</span>
       </div>
     </header>
 
-    <!-- 📥 Ingest Section -->
     <section class="card ingest-card">
       <div class="card-header">
         <h2>📥 Ingest Video</h2>
-        <span class="card-subtitle">Add a video to ask questions about</span>
       </div>
-      
       <div class="input-group">
-        <input 
-          type="text" 
-          id="videoIdInput" 
-          placeholder="Paste YouTube Video ID or URL..." 
-          autocomplete="off"
-        />
+        <input type="text" id="videoIdInput" placeholder="Paste YouTube URL..." autocomplete="off" />
         <button id="ingestBtn" class="btn btn-primary">
           <span class="btn-text">Ingest</span>
-          <span class="btn-loader loader-hidden">
-            <span class="cute-loader"></span>
-          </span>
+          <span class="btn-loader loader-hidden"><span class="cute-loader"></span></span>
         </button>
       </div>
-      
-      <div id="ingestFeedback" class="feedback-message"></div>
     </section>
 
-    <!-- 💬 Chat Section -->
     <section class="card chat-card">
       <div class="card-header">
-        <h2>💬 Ask Questions</h2>
-        <span class="card-subtitle">Get smart answers from the video</span>
+        <h2>💬 Chat</h2>
       </div>
-
-      <!-- Chat History -->
       <div id="chatHistory" class="chat-history">
         <div class="welcome-message">
           <div class="welcome-icon">✨</div>
-          <p>Ask anything about the ingested video!</p>
+          <p>Ready to help!</p>
         </div>
       </div>
-
-      <!-- Input Area -->
       <div class="chat-input-area">
         <div class="input-wrapper">
-          <input 
-            type="text" 
-            id="questionInput" 
-            placeholder="Type your question..." 
-            autocomplete="off"
-            disabled
-          />
+          <input type="text" id="questionInput" placeholder="Ask away..." disabled />
           <button id="askBtn" class="btn btn-send" disabled>
             <span class="send-icon">➤</span>
-            <span class="send-loader loader-hidden">
-              <span class="cute-loader small"></span>
-            </span>
           </button>
         </div>
-        <div id="chatFeedback" class="feedback-message"></div>
       </div>
     </section>
-
-    <!-- 🎀 Cute Floating Decorations -->
-    <div class="decoration decoration-1">💫</div>
-    <div class="decoration decoration-2">🌸</div>
-    <div class="decoration decoration-3">🎀</div>
-
   </div>
-
-  <!-- 🍞 Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
-
   <script src="popup.js"></script>
 </body>
 </html>

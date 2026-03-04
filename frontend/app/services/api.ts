@@ -16,3 +16,21 @@ export const chatWithAI = async (sessionId: string, question: string) => {
   const res = await axios.post(`${API_BASE}/chat`, { session_id: sessionId, question });
   return res.data;
 };
+
+export const generateNotesPDF = async (videoId: string) => {
+  const res = await axios.post(
+    `${API_BASE}/generate-notes`,
+    { video_id: videoId },
+    { responseType: "blob" } // IMPORTANT
+  );
+  return res.data;
+};
+
+export const generatePPT = async (videoId: string) => {
+  const res = await axios.post(
+    `${API_BASE}/generate-ppt`,
+    { video_id: videoId },
+    { responseType: "blob" }
+  );
+  return res.data;
+};

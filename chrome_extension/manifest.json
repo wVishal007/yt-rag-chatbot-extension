@@ -2,11 +2,11 @@
   "manifest_version": 3,
   "name": "YouTube RAG Assistant",
   "version": "1.0",
-  "description": "Ask questions about any YouTube video using your RAGService.",
+  "description": "Chat with any YouTube video using RAG.",
+  "permissions": ["activeTab", "tabs"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": "icons/icon.jpeg"
   },
-  "permissions": ["activeTab", "scripting","http://localhost:3001/*"],
-  "host_permissions": ["http://localhost:3001/*", "https://your-render-url.onrender.com/*"]
+  "host_permissions": ["http://localhost:3001/*"]
 }

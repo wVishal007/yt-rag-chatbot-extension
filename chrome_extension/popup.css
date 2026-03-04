@@ -614,3 +614,124 @@ body {
   .card { padding: 14px; }
   .message-content { max-width: 80%; }
 }
+
+/* Increase Extension Size */
+body {
+  width: 100%; /* Side panels are flexible */
+  min-width: 350px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-container {
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* Markdown Formatting */
+.markdown-content {
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.markdown-content p { margin-bottom: 0.8rem; }
+.markdown-content ul, .markdown-content ol { 
+  margin-left: 1.2rem; 
+  margin-bottom: 0.8rem; 
+}
+.markdown-content code {
+  background: rgba(123, 97, 255, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+.markdown-content strong { color: var(--secondary); }
+.markdown-content h1, .markdown-content h2, .markdown-content h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+/* Fix chat history to take remaining space */
+.chat-card {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+}
+
+.chat-history {
+  flex-grow: 1;
+  max-height: none; /* Let it fill the card */
+}
+
+/* Add to your existing CSS */
+body {
+    width: 450px; /* Force a larger width */
+    height: 600px; /* Force a larger height */
+    margin: 0;
+    overflow: hidden; 
+}
+
+.app-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    background: var(--bg-primary);
+}
+
+.chat-card {
+    flex-grow: 1; /* Makes the chat box fill all available space */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.chat-history {
+    flex-grow: 1; /* Makes history scroll, not the whole window */
+    max-height: none; 
+    overflow-y: auto;
+}
+
+/* Ensure Markdown Lists appear */
+.markdown-content ul, .markdown-content ol {
+    padding-left: 20px;
+    margin: 10px 0;
+}
+
+/* Markdown Styling for AI messages */
+.markdown-content {
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.markdown-content p { margin-bottom: 0.8rem; }
+.markdown-content ul, .markdown-content ol { 
+  margin-left: 1.2rem; 
+  margin-bottom: 0.8rem; 
+}
+.markdown-content code {
+  background: rgba(123, 97, 255, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+.markdown-content strong { color: var(--secondary); }
+.markdown-content h1, .markdown-content h2, .markdown-content h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+.markdown-content a {
+  color: var(--secondary);
+  text-decoration: none;
+}
+.markdown-content a:hover {
+  text-decoration: underline;
+}
