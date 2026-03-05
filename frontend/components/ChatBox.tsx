@@ -13,7 +13,7 @@ interface Message {
   sources?: string[];
 }
 
-const ChatBox: FC = () => {
+const ChatBox: FC<{ videoId?: string }> = ({ videoId }) => {
   const [sessionId] = useState(() => `sess-${Date.now()}`);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -48,7 +48,6 @@ const ChatBox: FC = () => {
 
   return (
     <div className="flex flex-col h-[600px]">
-      {/* Message Area */}
       <div className="flex-1 overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-gray-800">
         {messages.length === 0 && !loading && (
           <div className="h-full flex flex-col items-center justify-center text-gray-500 space-y-2 opacity-50">
@@ -60,15 +59,15 @@ const ChatBox: FC = () => {
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start animate-in fade-in slide-in-from-bottom-2"}`}>
             <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-              msg.role === "user" 
-                ? "bg-blue-600 text-white rounded-tr-none shadow-blue-500/10 shadow-lg" 
+              msg.role === "user"
+                ? "bg-blue-600 text-white rounded-tr-none shadow-blue-500/10 shadow-lg"
                 : "bg-white/5 border border-white/10 text-gray-200 rounded-tl-none"
             }`}>
               <div className="prose prose-invert prose-sm max-w-none">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
               </div>
 
-              {msg.sources && msg.sources.length > 0 && (
+              {msg.sources?.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-white/5">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-1">Sources</p>
                   <div className="flex flex-wrap gap-2">
@@ -84,6 +83,7 @@ const ChatBox: FC = () => {
             </div>
           </div>
         ))}
+
         {loading && (
           <div className="flex justify-start">
             <div className="bg-white/5 border border-white/10 p-4 rounded-2xl rounded-tl-none animate-pulse">
@@ -91,10 +91,11 @@ const ChatBox: FC = () => {
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+
+        <div ref={messagesEndRef} className="scroll-m-8" />
       </div>
 
-      {/* Input Area */}
+      {/* Input */}
       <div className="mt-6 relative">
         <input
           value={question}

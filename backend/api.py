@@ -49,6 +49,7 @@ class NotesRequest(BaseModel):
 # =====================================================
 @app.post("/ingest")
 def ingest_video(req: IngestRequest):
+    print(req)
     result = rag_service.ingest_video(req.video_id)
     if result.get("status") == "error":
         raise HTTPException(status_code=400, detail=result.get("error"))
