@@ -1,0 +1,1264 @@
+# ===============================
+# AUTO-GENERATED MERGED FILE
+# ===============================
+
+
+
+# =====================================
+# FILE: .\test.py
+# =====================================
+
+import os
+
+# 📂 Folder to scan (current folder)
+PROJECT_ROOT = "."
+
+# 📄 Output file
+OUTPUT_FILE = "combined_code.py"
+
+# ❌ Files/Folders to ignore
+IGNORE_FOLDERS = {
+    "__pycache__",
+    ".git",
+    ".venv",
+    "venv",
+    "vector_db",
+    ".idea",
+    ".vscode"
+}
+
+IGNORE_FILES = {
+    "merge_to_single.py",
+    OUTPUT_FILE
+}
+
+def should_ignore(path):
+    for folder in IGNORE_FOLDERS:
+        if folder in path:
+            return True
+    return False
+
+
+def merge_python_files():
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as outfile:
+        outfile.write("# ===============================\n")
+        outfile.write("# AUTO-GENERATED MERGED FILE\n")
+        outfile.write("# ===============================\n\n")
+
+        for root, dirs, files in os.walk(PROJECT_ROOT):
+            if should_ignore(root):
+                continue
+
+            for file in files:
+                if file.endswith(".py") and file not in IGNORE_FILES:
+                    file_path = os.path.join(root, file)
+
+                    print(f"Adding: {file_path}")
+
+                    outfile.write("\n\n")
+                    outfile.write("# =====================================\n")
+                    outfile.write(f"# FILE: {file_path}\n")
+                    outfile.write("# =====================================\n\n")
+
+                    with open(file_path, "r", encoding="utf-8") as infile:
+                        outfile.write(infile.read())
+
+    print(f"\n✅ All useful Python files merged into: {OUTPUT_FILE}")
+
+
+if __name__ == "__main__":
+    merge_python_files()
+
+# =====================================
+# FILE: .\backend\api.py
+# =====================================
+
+# backend/main.py
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel
+from backend.services.rag_service import RAGService
+import logging
+from fastapi.middleware.cors import CORSMiddleware
+origins = [
+    "http://localhost:3000",
+]
+
+
+# -----------------------------
+# Configure Logging
+# -----------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+# -----------------------------
+# Initialize FastAPI + RAGService
+# -----------------------------
+app = FastAPI(title="RAG Video Assistant")
+rag_service = RAGService()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,        # <-- important
+    allow_credentials=True,
+    allow_methods=["*"],          # allow POST, GET, OPTIONS, etc.
+    allow_headers=["*"],          # allow Content-Type, Authorization, etc.
+)
+
+# -----------------------------
+# Request Models
+# -----------------------------
+class IngestRequest(BaseModel):
+    video_id: str
+
+class ChatRequest(BaseModel):
+    session_id: str
+    question: str
+
+class NotesRequest(BaseModel):
+    video_id: str    
+
+# =====================================================
+# 📥 Ingest Video
+# =====================================================
+@app.post("/ingest")
+def ingest_video(req: IngestRequest):
+    result = rag_service.ingest_video(req.video_id)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result
+
+# =====================================================
+# 🤖 Chat
+# =====================================================
+@app.post("/chat")
+def chat(req: ChatRequest):
+    result = rag_service.chat(req.session_id, req.question)
+    if "answer" not in result:
+        raise HTTPException(status_code=500, detail="Failed to generate answer")
+    return result
+
+# =====================================================
+# Health Check
+# =====================================================
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/generate-notes")
+def generate_notes(req: NotesRequest):
+    try:
+        pdf_bytes = rag_service.generate_notes(req.video_id)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=video-notes.pdf"},
+        )
+    except Exception as e:
+        print("❌ Error in /generate-notes:", str(e))   # <-- log full error
+        return Response(
+            content=f"Error generating PDF:\n{str(e)}",
+            media_type="text/plain",
+            status_code=500
+        )
+
+# =====================================
+# FILE: .\backend\services\notes_service.py
+# =====================================
+
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import A4
+from io import BytesIO
+import re
+import html
+
+class NotesService:
+
+    def __init__(self, generator):
+        self.generator = generator  # reuse your AnswerGenerator
+
+    def generate_notes_markdown(self, transcript: str) -> str:
+        prompt = f"""
+        You are an expert educator.
+        
+        Generate high-quality structured study notes from this transcript.
+        
+        Requirements:
+        1. Create clear section headings based on topic shifts.
+        2. Add subheadings if needed.
+        3. Use bullet points for explanations.
+        4. Highlight definitions clearly.
+        5. Add:
+           - Key Takeaways
+           - Important Concepts
+           - Final Summary
+        
+        Transcript:
+        {transcript}
+        """
+
+        result = self.generator.llm.invoke(prompt)
+        return result.content
+
+    def markdown_to_pdf(self, markdown_text: str) -> bytes:
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+
+        # Base styles
+        styles = getSampleStyleSheet()
+        normal = styles["Normal"]
+        heading1 = styles["Heading1"]
+        heading2 = styles["Heading2"]
+
+        # Custom bullet style
+        bullet_style = ParagraphStyle(
+            "Bullet", parent=normal, leftIndent=15, bulletIndent=10
+        )
+
+        for line in markdown_text.split("\n"):
+            line = line.strip()
+            if not line or line.startswith("---"):
+                continue
+
+            # Escape special HTML characters
+            line = html.escape(line)
+
+            # ✅ Convert **bold** to <b>bold</b>
+            line = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", line)
+
+            # Headings
+            if line.startswith("# "):
+                elements.append(Paragraph(line[2:], heading1))
+                elements.append(Spacer(1, 0.3 * inch))
+            elif line.startswith("## "):
+                elements.append(Paragraph(line[3:], heading2))
+                elements.append(Spacer(1, 0.25 * inch))
+            # Bullet points
+            elif line.startswith("- "):
+                elements.append(Paragraph(line[2:], bullet_style, bulletText="•"))
+                elements.append(Spacer(1, 0.1 * inch))
+            else:
+                elements.append(Paragraph(line, normal))
+                elements.append(Spacer(1, 0.2 * inch))
+
+        doc.build(elements)
+        pdf_bytes = buffer.getvalue()
+        buffer.close()
+        return pdf_bytes
+
+# =====================================
+# FILE: .\backend\services\rag_service.py
+# =====================================
+
+# backend/services/rag_service.py
+
+import os
+import logging
+from dotenv import load_dotenv
+from typing import Dict
+import json
+
+from ingestion.youtube_loader import YouTubeLoader
+from ingestion.transcript_cleaner import TranscriptCleaner
+from ingestion.metadata_handler import MetadataHandler
+from backend.services.notes_service import NotesService
+
+from retrieval.embeddings import EmbeddingModel
+from retrieval.vector_store import VectorStoreManager
+from retrieval.reranker import Reranker
+
+from llm.answer_generator import AnswerGenerator
+from llm.question_rewriter import QuestionRewriter
+
+from memory.conversation_memory import ConversationMemoryManager
+
+# -----------------------------
+# Configure Logging
+# -----------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+class RAGService:
+    """
+    Production-ready RAGService:
+    - Video ingestion
+    - Hybrid retrieval
+    - Reranking
+    - LLM answer generation
+    - Session memory handling
+    """
+
+    def __init__(self):
+        load_dotenv()
+
+        api_key = os.getenv("MISTRAL_API_KEY")
+        if not api_key:
+            raise ValueError("MISTRAL_API_KEY not found in environment.")
+
+        # -----------------------------
+        # Core Components
+        # -----------------------------
+        self.loader = YouTubeLoader()
+        self.cleaner = TranscriptCleaner()
+        self.chunker = MetadataHandler(chunk_size=500)
+
+        self.embedding_model = EmbeddingModel(api_key=api_key).get_model()
+        self.vector_manager = VectorStoreManager(self.embedding_model)
+
+        self.reranker = Reranker()
+        self.generator = AnswerGenerator(api_key=api_key)
+        self.rewriter = QuestionRewriter(api_key=api_key)
+        self.notes_service = NotesService(self.generator)
+
+        # -----------------------------
+        # Session Memory Store
+        # -----------------------------
+        self.sessions: Dict[str, ConversationMemoryManager] = {}
+
+    # =====================================================
+    # 📥 Ingest Video
+    # =====================================================
+    def ingest_video(self, video_id: str) -> dict:
+        """
+        Fetch transcript, clean, chunk and store in vector DB.
+        """
+        try:
+            raw_transcript = self.loader.fetch_transcript(video_id)
+
+            if not raw_transcript or len(raw_transcript) == 0:
+                logging.warning(f"No transcript available for video {video_id}")
+                return {"status": "error", "error": "Transcript is empty."}
+
+            cleaned = self.cleaner.clean_transcript(raw_transcript)
+            # ✅ Save transcript locally (cache)
+            BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            transcript_dir = os.path.join(BASE_DIR, "transcripts")
+            os.makedirs(transcript_dir, exist_ok=True)
+            
+            file_path = os.path.join(transcript_dir, f"{video_id}.json")
+            
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(cleaned, f)
+            chunks = self.chunker.chunk_transcript(cleaned)
+
+            if not chunks:
+                logging.warning(f"No chunks generated for video {video_id}")
+                return {"status": "error", "error": "No chunks generated from transcript."}
+
+            # Avoid duplicates
+            existing_urls = {doc.metadata["url"] for doc, _ in self.vector_manager.similarity_search(" ", k=1000)}
+            new_chunks = [c for c in chunks if c["url"] not in existing_urls]
+
+            if not new_chunks:
+                logging.info(f"All chunks already exist for video {video_id}")
+            else:
+                self.vector_manager.create_vector_store(new_chunks)
+                # Persist immediately
+                self.vector_manager.vectorstore.persist()
+                logging.info(f"Ingested {len(new_chunks)} new chunks for video {video_id}")
+
+            return {
+                "status": "indexed",
+                "video_id": video_id,
+                "chunks": len(new_chunks)
+            }
+
+        except Exception as e:
+            logging.error(f"Error ingesting video {video_id}: {e}")
+            return {"status": "error", "error": str(e)}
+
+    # =====================================================
+    # 🤖 Chat
+    # =====================================================
+    def chat(self, session_id: str, question: str) -> dict:
+        """
+        Main conversational RAG flow.
+        """
+        if session_id not in self.sessions:
+            self.sessions[session_id] = ConversationMemoryManager()
+
+        memory = self.sessions[session_id]
+
+        # Limit chat history to last 50 messages
+        if len(memory.chat_history) > 50:
+            memory.chat_history = memory.chat_history[-50:]
+
+        # -------------------------
+        # Get Conversation History
+        # -------------------------
+        history = memory.get_history()
+
+        # -------------------------
+        # Rewrite Question
+        # -------------------------
+        standalone_question = self.rewriter.rewrite(history, question)
+
+        # -------------------------
+        # Retrieve Top-K
+        # -------------------------
+        try:
+            results = self.vector_manager.similarity_search(
+                standalone_question,
+                k=8
+            )
+            logging.info(f"Retrieved {len(results)} results for question: {standalone_question}")
+
+        except Exception as e:
+            logging.error(f"Vector search error: {e}")
+            return {"answer": "Error retrieving information.", "sources": []}
+
+        if not results:
+            logging.info(f"No results found in vector DB for video.")
+            return {"answer": "The video does not mention this.", "sources": []}
+
+        # Extract documents only
+        retrieved_docs = [doc for doc, _ in results]
+
+        # -------------------------
+        # Rerank
+        # -------------------------
+        reranked_docs = self.reranker.rerank(
+            standalone_question,
+            retrieved_docs,
+            top_k=5
+        )
+
+        # Sort by timestamp
+        reranked_docs = sorted(
+            reranked_docs,
+            key=lambda x: x.metadata.get("start", 0)
+        )
+
+        # reranked_docs = sorted(
+        # retrieved_docs[:5],
+        # key=lambda x: x.metadata.get("start", 0)
+        # )
+
+        # -------------------------
+        # Generate Answer
+        # -------------------------
+        try:
+            result = self.generator.generate_answer(
+                reranked_docs,
+                standalone_question
+            )
+        except Exception as e:
+            logging.error(f"LLM generation error: {e}")
+            return {"answer": "Error generating answer.", "sources": []}
+
+        # -------------------------
+        # Save Memory
+        # -------------------------
+        memory.add_user_message(question)
+        memory.add_ai_message(result["answer"])
+
+        return {
+            "answer": result["answer"],
+            "sources": result.get("sources", [])
+        }
+    
+    def generate_notes(self, video_id: str) -> bytes:
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        file_path = os.path.join(BASE_DIR, "transcripts", f"{video_id}.json")
+
+        if not os.path.exists(file_path):
+            raise Exception("Transcript not found. Please ingest the video first.")
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            cleaned = json.load(f)
+
+        full_text = " ".join([snippet["text"] for snippet in cleaned])
+
+        markdown = self.notes_service.generate_notes_markdown(full_text)
+
+        pdf_bytes = self.notes_service.markdown_to_pdf(markdown)
+
+        return pdf_bytes
+
+# =====================================
+# FILE: .\evaluation\experiment_logs.py
+# =====================================
+
+# evaluation/experiment_logs.py
+
+import json
+from datetime import datetime
+
+
+class ExperimentLogger:
+
+    def __init__(self, log_file="evaluation_logs.json"):
+        self.log_file = log_file
+
+    def log(self, question, precision, recall):
+
+        entry = {
+            "timestamp": str(datetime.now()),
+            "question": question,
+            "precision@k": precision,
+            "recall@k": recall
+        }
+
+        try:
+            with open(self.log_file, "r") as f:
+                data = json.load(f)
+        except:
+            data = []
+
+        data.append(entry)
+
+        with open(self.log_file, "w") as f:
+            json.dump(data, f, indent=4)
+
+# =====================================
+# FILE: .\evaluation\metrics.py
+# =====================================
+
+# evaluation/metrics.py
+
+def precision_at_k(retrieved_docs, relevant_urls, k=3):
+    retrieved_urls = [doc.metadata["url"] for doc in retrieved_docs[:k]]
+
+    relevant_count = sum(
+        1 for url in retrieved_urls if url in relevant_urls
+    )
+
+    return relevant_count / k
+
+
+def recall_at_k(retrieved_docs, relevant_urls, k=3):
+    retrieved_urls = [doc.metadata["url"] for doc in retrieved_docs[:k]]
+
+    relevant_count = sum(
+        1 for url in retrieved_urls if url in relevant_urls
+    )
+
+    return relevant_count / len(relevant_urls)
+
+# =====================================
+# FILE: .\frontend\node_modules\flatted\python\flatted.py
+# =====================================
+
+# ISC License
+#
+# Copyright (c) 2018-2025, Andrea Giammarchi, @WebReflection
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+# REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+# AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+# INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+# LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+# OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+# PERFORMANCE OF THIS SOFTWARE.
+
+import json as _json
+
+class _Known:
+    def __init__(self):
+        self.key = []
+        self.value = []
+
+class _String:
+    def __init__(self, value):
+        self.value = value
+
+
+def _array_keys(value):
+    keys = []
+    i = 0
+    for _ in value:
+        keys.append(i)
+        i += 1
+    return keys
+
+def _object_keys(value):
+    keys = []
+    for key in value:
+        keys.append(key)
+    return keys
+
+def _is_array(value):
+    return isinstance(value, (list, tuple))
+
+def _is_object(value):
+    return isinstance(value, dict)
+
+def _is_string(value):
+    return isinstance(value, str)
+
+def _index(known, input, value):
+    input.append(value)
+    index = str(len(input) - 1)
+    known.key.append(value)
+    known.value.append(index)
+    return index
+
+def _loop(keys, input, known, output):
+    for key in keys:
+        value = output[key]
+        if isinstance(value, _String):
+            _ref(key, input[int(value.value)], input, known, output)
+
+    return output
+
+def _ref(key, value, input, known, output):
+    if _is_array(value) and value not in known:
+        known.append(value)
+        value = _loop(_array_keys(value), input, known, value)
+    elif _is_object(value) and value not in known:
+        known.append(value)
+        value = _loop(_object_keys(value), input, known, value)
+
+    output[key] = value
+
+def _relate(known, input, value):
+    if _is_string(value) or _is_array(value) or _is_object(value):
+        try:
+            return known.value[known.key.index(value)]
+        except:
+            return _index(known, input, value)
+
+    return value
+
+def _transform(known, input, value):
+    if _is_array(value):
+        output = []
+        for val in value:
+            output.append(_relate(known, input, val))
+        return output
+
+    if _is_object(value):
+        obj = {}
+        for key in value:
+            obj[key] = _relate(known, input, value[key])
+        return obj
+
+    return value
+
+def _wrap(value):
+    if _is_string(value):
+        return _String(value)
+
+    if _is_array(value):
+        i = 0
+        for val in value:
+            value[i] = _wrap(val)
+            i += 1
+
+    elif _is_object(value):
+        for key in value:
+            value[key] = _wrap(value[key])
+
+    return value
+
+def parse(value, *args, **kwargs):
+    json = _json.loads(value, *args, **kwargs)
+    wrapped = []
+    for value in json:
+        wrapped.append(_wrap(value))
+
+    input = []
+    for value in wrapped:
+        if isinstance(value, _String):
+            input.append(value.value)
+        else:
+            input.append(value)
+
+    value = input[0]
+
+    if _is_array(value):
+        return _loop(_array_keys(value), input, [value], value)
+
+    if _is_object(value):
+        return _loop(_object_keys(value), input, [value], value)
+
+    return value
+
+
+def stringify(value, *args, **kwargs):
+    known = _Known()
+    input = []
+    output = []
+    i = int(_index(known, input, value))
+    while i < len(input):
+        output.append(_transform(known, input, input[i]))
+        i += 1
+    return _json.dumps(output, *args, **kwargs)
+
+
+# =====================================
+# FILE: .\ingestion\metadata_handler.py
+# =====================================
+
+# ingestion/metadata_handler.py
+
+
+class MetadataHandler:
+
+    def __init__(self, chunk_size: int = 500):
+        self.chunk_size = chunk_size
+
+    def chunk_transcript(self, transcript_data: list):
+        """
+        Merge transcript snippets into chunks
+        while preserving first snippet timestamp.
+        """
+        chunks = []
+        current_chunk = []
+        chunk_start = None
+        video_id = transcript_data[0]["video_id"]
+
+        for snippet in transcript_data:
+            if not current_chunk:
+                chunk_start = snippet["start"]
+
+            current_chunk.append(snippet["text"])
+
+            joined_text = " ".join(current_chunk)
+
+            if len(joined_text) >= self.chunk_size:
+                chunks.append({
+                    "content": joined_text,
+                    "start": chunk_start,
+                    "video_id": video_id,
+                    "url": f"https://youtube.com/watch?v={video_id}&t={int(chunk_start)}"
+                })
+                current_chunk = []
+                chunk_start = None
+
+        # Add remaining chunk
+        if current_chunk:
+            chunks.append({
+                "content": " ".join(current_chunk),
+                "start": chunk_start,
+                "video_id": video_id,
+                "url": f"https://youtube.com/watch?v={video_id}&t={int(chunk_start)}"
+            })
+
+        return chunks
+
+# =====================================
+# FILE: .\ingestion\transcript_cleaner.py
+# =====================================
+
+# ingestion/transcript_cleaner.py
+
+import re
+
+
+class TranscriptCleaner:
+
+    @staticmethod
+    def clean_snippet(text: str) -> str:
+        """
+        Clean individual transcript snippet.
+        """
+        # Remove stage directions like (Laughter)
+        text = re.sub(r"\(.*?\)", "", text)
+
+        # Remove extra whitespace
+        text = re.sub(r"\s+", " ", text).strip()
+
+        return text
+
+    def clean_transcript(self, transcript_data: list):
+        """
+        Clean full transcript list.
+        """
+        for snippet in transcript_data:
+            snippet["text"] = self.clean_snippet(snippet["text"])
+
+        return transcript_data
+
+# =====================================
+# FILE: .\ingestion\youtube_loader.py
+# =====================================
+
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+
+class YouTubeLoader:
+    def __init__(self):
+        self.api = YouTubeTranscriptApi()
+
+    def fetch_transcript(self, video_id: str):
+        try:
+            # Try English first, fallback to any available auto-generated
+            try:
+                transcript = self.api.fetch(video_id=video_id, languages=['en'])
+            except NoTranscriptFound:
+                transcript = self.api.fetch(video_id=video_id)  # fallback auto-generated
+        except TranscriptsDisabled:
+            raise ValueError(f"Transcripts are disabled for video {video_id}")
+        except NoTranscriptFound:
+            raise ValueError(f"No transcripts found for video {video_id}")
+
+        structured_data = []
+        for snippet in transcript:
+            structured_data.append({
+                "text": snippet.text,
+                "start": snippet.start,
+                "duration": getattr(snippet, "duration", 0),
+                "video_id": video_id,
+                "url": f"https://youtube.com/watch?v={video_id}&t={int(snippet.start)}"
+            })
+        return structured_data
+
+# =====================================
+# FILE: .\llm\answer_generator.py
+# =====================================
+
+# llm/answer_generator.py
+
+from langchain_mistralai import ChatMistralAI
+from llm.prompt_templates import build_rag_prompt
+
+
+class AnswerGenerator:
+
+    def __init__(self, api_key: str):
+        self.llm = ChatMistralAI(
+            model="mistral-large-latest",
+            mistral_api_key=api_key,
+            temperature=0.2
+        )
+
+    def generate_answer(self, retrieved_docs, question: str):
+        
+        # Build context string
+        context = ""
+        sources = []
+
+        retrieved_docs = sorted(
+        retrieved_docs,
+        key=lambda x: x.metadata["start"]
+        )
+
+        for doc in retrieved_docs:
+            context += doc.page_content + "\n\n"
+            sources.append(doc.metadata["url"])
+
+        prompt = build_rag_prompt(context, question)
+
+        response = self.llm.invoke(prompt)
+
+        return {
+            "answer": response.content,
+            "sources": list(set(sources))
+        }
+
+# =====================================
+# FILE: .\llm\prompt_templates.py
+# =====================================
+
+def build_rag_prompt(context: str, question: str) -> str:
+    return f"""
+You are an expert assistant answering questions about a YouTube video.
+
+Rules:
+- Only use information from the provided context.
+- Do not add external knowledge.
+- If answer not found, say: "The video does not mention this."
+- Provide concise bullet-point answers.
+
+CONTEXT:
+{context}
+
+QUESTION:
+{question}
+
+ANSWER:
+"""
+
+# =====================================
+# FILE: .\llm\question_rewriter.py
+# =====================================
+
+# llm/question_rewriter.py
+
+from langchain_mistralai import ChatMistralAI
+
+
+class QuestionRewriter:
+
+    def __init__(self, api_key: str):
+        self.llm = ChatMistralAI(
+            model="mistral-large-latest",
+            mistral_api_key=api_key,
+            temperature=0
+        )
+
+    def rewrite(self, chat_history: str, question: str):
+
+        prompt = f"""
+Given the conversation history and a follow-up question,
+rewrite the question into a standalone question.
+
+Conversation History:
+{chat_history}
+
+Follow-up Question:
+{question}
+
+Standalone Question:
+"""
+
+        response = self.llm.invoke(prompt)
+        return response.content.strip()
+
+# =====================================
+# FILE: .\memory\conversation_memory.py
+# =====================================
+
+# memory/conversation_memory.py
+
+class ConversationMemoryManager:
+
+    def __init__(self):
+        self.chat_history = []
+
+    def add_user_message(self, message: str):
+        self.chat_history.append({"role": "user", "content": message})
+
+    def add_ai_message(self, message: str):
+        self.chat_history.append({"role": "assistant", "content": message})
+
+    def get_history(self):
+        """
+        Returns formatted chat history as plain text.
+        """
+        history_text = ""
+
+        for msg in self.chat_history:
+            if msg["role"] == "user":
+                history_text += f"User: {msg['content']}\n"
+            else:
+                history_text += f"Assistant: {msg['content']}\n"
+
+        return history_text
+
+    def clear(self):
+        self.chat_history = []
+
+# =====================================
+# FILE: .\retrieval\embeddings.py
+# =====================================
+
+# retrieval/embeddings.py
+from dotenv import load_dotenv
+from langchain_mistralai import MistralAIEmbeddings
+load_dotenv()
+
+
+class EmbeddingModel:
+
+    def __init__(self, api_key: str):
+        self.embeddings = MistralAIEmbeddings(
+            model="mistral-embed",
+            mistral_api_key=api_key
+        )
+
+    def get_model(self):
+        return self.embeddings
+
+# =====================================
+# FILE: .\retrieval\hybrid_search.py
+# =====================================
+
+
+
+# =====================================
+# FILE: .\retrieval\reranker.py
+# =====================================
+
+# retrieval/reranker.py
+
+from sentence_transformers import CrossEncoder
+
+
+class Reranker:
+
+    def __init__(self, model_name="cross-encoder/ms-marco-MiniLM-L-6-v2"):
+        self.model = CrossEncoder(model_name)
+
+    def rerank(self, query, documents, top_k=8):
+
+        pairs = [(query, doc.page_content) for doc in documents]
+        scores = self.model.predict(pairs)
+
+        scored_docs = list(zip(documents, scores))
+        scored_docs.sort(key=lambda x: x[1], reverse=True)
+
+        return [doc for doc, score in scored_docs[:top_k]]
+
+# =====================================
+# FILE: .\retrieval\vector_store.py
+# =====================================
+
+# retrieval/vector_store.py
+
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+
+
+class VectorStoreManager:
+
+    def __init__(self, embedding_model, persist_directory="vector_db"):
+        self.embedding_model = embedding_model
+        self.persist_directory = persist_directory
+
+        self.vectorstore = Chroma(
+            persist_directory=self.persist_directory,
+            embedding_function=self.embedding_model
+        )
+
+    def create_vector_store(self, chunks: list):
+        documents = []
+
+        for chunk in chunks:
+            documents.append(
+                Document(
+                    page_content=chunk["content"],
+                    metadata={
+                        "start": chunk["start"],
+                        "video_id": chunk["video_id"],
+                        "url": chunk["url"]
+                    }
+                )
+            )
+
+        self.vectorstore.add_documents(documents)
+
+    def similarity_search(self, query: str, k: int = 5):
+        return self.vectorstore.similarity_search_with_score(query, k=k)
+
+# =====================================
+# FILE: .\test\rough.py
+# =====================================
+
+from youtube_transcript_api import YouTubeTranscriptApi
+
+video_id = "5MuIMqhT8DM"
+yt_api = YouTubeTranscriptApi()
+transcript = yt_api.fetch(video_id=video_id)
+
+structured_transcript = []
+
+for snippet in transcript.snippets:
+    structured_transcript.append({
+        "text": snippet.text,
+        "start": snippet.start,
+        "duration": snippet.duration,
+        "video_id": video_id,
+        "url": f"https://youtube.com/watch?v={video_id}&t={int(snippet.start)}"
+    })
+
+print(structured_transcript[0])
+
+# =====================================
+# FILE: .\test\tempCodeRunnerFile.py
+# =====================================
+
+for r in results:
+#     print("\n---")
+#     print("Content:", r.page_content)
+#     print("Source:", r.metadata["url"])
+
+# =====================================
+# FILE: .\test\test_ingestion.py
+# =====================================
+
+from ingestion.youtube_loader import YouTubeLoader
+from ingestion.transcript_cleaner import TranscriptCleaner
+from ingestion.metadata_handler import MetadataHandler
+
+video_id = "5MuIMqhT8DM"
+
+loader = YouTubeLoader()
+cleaner = TranscriptCleaner()
+chunker = MetadataHandler(chunk_size=500)
+
+raw_transcript = loader.fetch_transcript(video_id)
+clean_transcript = cleaner.clean_transcript(raw_transcript)
+chunks = chunker.chunk_transcript(clean_transcript)
+
+print(chunks[0])
+
+# =====================================
+# FILE: .\test\test_retrieval.py
+# =====================================
+
+# test_retrieval.py
+
+import os
+from dotenv import load_dotenv
+
+from ingestion.youtube_loader import YouTubeLoader
+from ingestion.transcript_cleaner import TranscriptCleaner
+from ingestion.metadata_handler import MetadataHandler
+
+from retrieval.embeddings import EmbeddingModel
+from retrieval.vector_store import VectorStoreManager
+
+from llm.answer_generator import AnswerGenerator
+from llm.question_rewriter import QuestionRewriter
+
+from memory.conversation_memory import ConversationMemoryManager
+
+
+# ==============================
+# 🔐 Load API Key
+# ==============================
+load_dotenv()
+api_key = os.getenv("MISTRAL_API_KEY")
+
+if not api_key:
+    raise ValueError("❌ MISTRAL_API_KEY not found in .env file")
+
+video_id = "5MuIMqhT8DM"
+
+
+# ==============================
+# 📥 INGESTION (Only First Time)
+# ==============================
+loader = YouTubeLoader()
+cleaner = TranscriptCleaner()
+chunker = MetadataHandler(chunk_size=500)
+
+embedding_model = EmbeddingModel(api_key=api_key).get_model()
+vector_manager = VectorStoreManager(embedding_model)
+
+if vector_manager.vectorstore._collection.count() == 0:
+    print("📦 Creating vector database...")
+
+    raw = loader.fetch_transcript(video_id)
+    cleaned = cleaner.clean_transcript(raw)
+    chunks = chunker.chunk_transcript(cleaned)
+
+    vector_manager.create_vector_store(chunks)
+    print("✅ Vector database created.\n")
+else:
+    print("✅ Loaded existing vector database.\n")
+
+
+# ==============================
+# 🤖 LLM + Memory Setup
+# ==============================
+generator = AnswerGenerator(api_key=api_key)
+rewriter = QuestionRewriter(api_key=api_key)
+memory = ConversationMemoryManager()
+
+print("🎥 Chat with YouTube Video (type 'exit' to stop)\n")
+
+
+# ==============================
+# 🔁 CHAT LOOP
+# ==============================
+while True:
+    user_question = input("You: ").strip()
+
+    if user_question.lower() == "exit":
+        print("\n👋 Exiting chat.")
+        break
+
+    if not user_question:
+        continue
+
+    # ------------------------------
+    # 🧠 Get Conversation History
+    # ------------------------------
+    history = memory.get_history()
+
+    # ------------------------------
+    # 🔄 Rewrite Question (Context-aware)
+    # ------------------------------
+    standalone_question = rewriter.rewrite(history, user_question)
+
+    print("\n🔎 Standalone Question:")
+    print(standalone_question)
+
+    # ------------------------------
+    # 🔍 Retrieve Top-K
+    # ------------------------------
+    results = vector_manager.similarity_search(
+        standalone_question,
+        k=5
+    )
+
+    print("\nRAW RETRIEVAL RESULTS:")
+    for doc, score in results:
+        print("Score:", score)
+        print("Preview:", doc.page_content[:150])
+        print("------")
+
+    if not results:
+        print("\nAssistant: The video does not mention this.\n")
+        continue
+
+    # ------------------------------
+    # 🚨 Safety Check (avoid hallucination)
+    # ------------------------------
+    # best_score = results[0][1]  # lower = better (Chroma distance)
+
+    # if best_score > 1.2:
+    #     print("\nAssistant: This question may not be clearly covered in the video.\n")
+    #     continue
+
+    # ------------------------------
+    # 🧪 DEBUG: Show Retrieved Chunks
+    # ------------------------------
+    print("\nDEBUG: Retrieved Chunks\n")
+
+    for doc, score in results:
+        print("Score:", score)
+        print("Content:", doc.page_content[:200])
+        print("URL:", doc.metadata.get("url", "N/A"))
+        print("------")
+
+    # ------------------------------
+    # 📚 Extract Documents Only
+    # ------------------------------
+    retrieved_docs = [doc for doc, _ in results]
+
+    # Sort by timestamp if available
+    retrieved_docs = sorted(
+        retrieved_docs,
+        key=lambda x: x.metadata.get("start", 0)
+    )
+
+    # ------------------------------
+    # 🤖 Generate Answer
+    # ------------------------------
+    result = generator.generate_answer(
+        retrieved_docs,
+        standalone_question
+    )
+
+    print("\nAssistant:\n")
+    print(result["answer"])
+
+    # ------------------------------
+    # 📎 Show Sources
+    # ------------------------------
+    print("\nSources:")
+    for s in result.get("sources", []):
+        print(s)
+
+    # ------------------------------
+    # 🧠 Save Conversation Memory
+    # ------------------------------
+    memory.add_user_message(user_question)
+    memory.add_ai_message(result["answer"])
+
+    print("\n" + "-" * 60 + "\n")

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>YouTube RAG Assistant</title>
+  <link rel="stylesheet" href="popup.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">🎬</span>
+        <h1>YouTube RAG Assistant</h1>
+      </div>
+      <div class="status-badge" id="connectionStatus">
+        <span class="status-dot" style="background:var(--error)"></span>
+        <span>Offline</span>
+      </div>
+    </header>
+
+    <section class="card ingest-card">
+      <div class="card-header">
+        <h2>📥 Ingest Video</h2>
+      </div>
+      <div class="input-group">
+        <input type="text" id="videoIdInput" placeholder="Paste YouTube URL..." autocomplete="off" />
+        <button id="ingestBtn" class="btn btn-primary">
+          <span class="btn-text">Ingest</span>
+          <span class="btn-loader loader-hidden"><span class="cute-loader"></span></span>
+        </button>
+      </div>
+    </section>
+
+    <section class="card chat-card">
+      <div class="card-header">
+        <h2>💬 Chat</h2>
+      </div>
+      <div id="chatHistory" class="chat-history">
+        <div class="welcome-message">
+          <div class="welcome-icon">✨</div>
+          <p>Ready to help!</p>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <div class="input-wrapper">
+          <input type="text" id="questionInput" placeholder="Ask away..." disabled />
+          <button id="askBtn" class="btn btn-send" disabled>
+            <span class="send-icon">➤</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div id="toastContainer" class="toast-container"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
