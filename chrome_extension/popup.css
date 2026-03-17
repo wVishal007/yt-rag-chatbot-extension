@@ -735,3 +735,14 @@ body {
 .markdown-content a:hover {
   text-decoration: underline;
 }
+
+.chat-actions{
+display:flex;
+gap:8px;
+}
+
+.btn-secondary{
+background:#eee;
+color:#333;
+font-weight:600;
+}
