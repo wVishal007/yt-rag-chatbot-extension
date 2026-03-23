@@ -6,26 +6,75 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 2️⃣ Directory to start scanning
-const projectDir = path.resolve(__dirname); // Change if needed
-const outputFile = path.join(projectDir, "all_code_combined.ts"); // Output file
+// 2️⃣ Directory to scan
+const projectDir = path.resolve(__dirname); // change if needed
+const outputFile = path.join(projectDir, "all_code_combined.ts");
 
-// 3️⃣ Folders to ignore
-const ignoreDirs = ["node_modules", ".git", "dist", "build"];
+// 3️⃣ Config (🔥 fully customizable)
+const config = {
+  ignoreDirs: new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    ".next",
+    "out",
+    "coverage",
+    "public",
+    "components"
+  ]),
 
-// 4️⃣ Helper function to get all .ts and .tsx files recursively
+  ignoreFiles: new Set([
+    ".env",
+    ".env.local",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+  ]),
+
+  ignorePatterns: [
+    ".test.ts",
+    ".spec.ts",
+    ".d.ts",
+  ],
+};
+
+// 4️⃣ Ignore checker
+function shouldIgnore(file, isDir) {
+  if (isDir && config.ignoreDirs.has(file)) return true;
+
+  if (!isDir && config.ignoreFiles.has(file)) return true;
+
+  if (!isDir && config.ignorePatterns.some(p => file.endsWith(p))) return true;
+
+  return false;
+}
+
+// 5️⃣ Get all TS/TSX files recursively
 function getAllTSFiles(dir) {
   let results = [];
-  const list = fs.readdirSync(dir);
+
+  let list;
+  try {
+    list = fs.readdirSync(dir);
+  } catch {
+    return results; // skip inaccessible dirs
+  }
 
   for (const file of list) {
     const filePath = path.join(dir, file);
-    const stat = fs.statSync(filePath);
+
+    let stat;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      continue; // skip broken symlinks / permission issues
+    }
+
+    if (shouldIgnore(file, stat.isDirectory())) continue;
 
     if (stat.isDirectory()) {
-      if (!ignoreDirs.includes(file)) {
-        results = results.concat(getAllTSFiles(filePath));
-      }
+      results = results.concat(getAllTSFiles(filePath));
     } else if (file.endsWith(".ts") || file.endsWith(".tsx")) {
       results.push(filePath);
     }
@@ -34,17 +83,24 @@ function getAllTSFiles(dir) {
   return results;
 }
 
-// 5️⃣ Get all files
+// 6️⃣ Collect files
 const tsFiles = getAllTSFiles(projectDir);
 
-// 6️⃣ Combine all content
+// 7️⃣ Combine content
 let combinedContent = "";
+
 for (const file of tsFiles) {
-  const content = fs.readFileSync(file, "utf-8");
-  combinedContent += `\n\n// ===== File: ${path.relative(projectDir, file)} =====\n\n`;
-  combinedContent += content;
+  try {
+    const content = fs.readFileSync(file, "utf-8");
+
+    combinedContent += `\n\n// ===== File: ${path.relative(projectDir, file)} =====\n\n`;
+    combinedContent += content;
+  } catch {
+    console.warn(`⚠️ Skipped: ${file}`);
+  }
 }
 
-// 7️⃣ Write to single file
+// 8️⃣ Write output
 fs.writeFileSync(outputFile, combinedContent, "utf-8");
+
 console.log(`✅ Combined ${tsFiles.length} files into ${outputFile}`);
